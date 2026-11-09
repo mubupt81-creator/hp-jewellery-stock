@@ -21,6 +21,12 @@
 <div class="panel"><h2>Stock summary by category</h2><div id="categorySummary" class="hint">No stock data yet.</div></div>
 </section>
 <section id="stock" class="page hidden">
+<div class="panel"><h2>Import WinGold PDF</h2>
+<label>Choose WinGold Gold Barcode Stock Register PDF</label><input class="field" type="file" id="pdfImportFile" accept=".pdf,application/pdf">
+<p class="hint">PDF-യിലെ Barcode, Gross Wt., Stone Wt., Pure Wt., Making Rate/Amount, Article, Line1, Alias, Purchase Doc. എന്നിവ വായിക്കും. ഓരോ barcode-ഉം ഓരോ physical piece ആയി import ചെയ്യും. Import ചെയ്യുന്നതിന് മുമ്പ് preview പരിശോധിക്കുക.</p>
+<div id="pdfImportStatus" class="status">PDF file select ചെയ്യുക.</div><div id="pdfPreview"></div>
+<button id="importPdfNow" class="btn green hidden">Import PDF stock</button>
+</div>
 <div class="panel"><h2>Import WinGold Excel / CSV</h2><label>Choose exported Excel or CSV file</label><input class="field" type="file" id="importFile" accept=".xlsx,.xls,.csv">
 <div class="row"><div><label>Weight in Excel means</label><select id="weightMode" class="field"><option value="total">Total weight for the row (divide by Qty)</option><option value="unit">Weight per piece</option></select></div><div><label>Import action</label><select id="importMode" class="field"><option value="replace">Replace current stock list</option><option value="append">Add to current stock list</option></select></div></div>
 <p class="hint">Barcode / Item Code / Name / Category / Purity / Weight / Qty headings തിരിച്ചറിയും. Barcode ഇല്ലാത്ത ഓരോ piece-നും വേറിട്ട unique barcode സ്വയം നൽകും. Import ചെയ്താൽ ആദ്യം backup എടുക്കുക.</p><div id="importStatus" class="status">Waiting for file.</div>
@@ -46,6 +52,7 @@
 <div class="panel"><h2>Data & privacy</h2><p class="hint">No account or cloud server is used. Data remains in this browser. Browser data clearing can erase it. Keep backups in a safe place and transfer them securely between devices.</p><button id="clearData" class="btn red">Delete all local stock data</button></div>
 </section>
 </main><footer>Hyatt Palace Jewellery LLC · Stock Manager</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 const KEY='hpj_stock_manager_v2';let db={version:2,items:[],extras:[],updatedAt:null},scanner=null;
@@ -56,7 +63,7 @@ function totals(){let a=db.items;return{lines:a.length,expected:a.reduce((s,x)=>
 function renderDash(){let t=totals();$('sLines').textContent=t.lines;$('sExpected').textContent=t.expected;$('sCounted').textContent=t.counted;$('sDiff').textContent=t.counted-t.expected;$('sWeight').textContent=fmt(t.weight)+' g';$('sCountWeight').textContent=fmt(t.countWeight)+' g';$('sShort').textContent=t.short;$('sExtra').textContent=t.extra;let groups={};db.items.forEach(x=>groups[x.categoryCode||'Other']=(groups[x.categoryCode||'Other']||0)+x.expectedQty);$('categorySummary').innerHTML=Object.keys(groups).length?Object.entries(groups).map(([k,v])=>'<span class="pill">'+esc(k)+': '+v+' pcs</span> ').join(''):'No stock data yet.'}
 function renderStock(){let q=($('search').value||'').toLowerCase(),cat=$('filterCat').value,type=$('filterType').value;let arr=db.items.filter(x=>(!q||[x.name,x.code,x.barcodes.join(' ')].join(' ').toLowerCase().includes(q))&&(!cat||x.categoryCode===cat)&&(!type||x.itemType===type));$('stockList').innerHTML=arr.length?arr.map(x=>'<div class="item"><div class="itemmain"><b>'+esc(x.name||x.code||'Unnamed item')+'</b><small>'+esc(x.code)+' · '+esc(x.categoryCode)+' · '+esc(x.purity)+' · '+x.expectedQty+' pcs · '+fmt(x.expectedWeight)+' g</small><br><small>'+x.barcodes.length+' unique barcode(s)</small></div><button class="btn alt" data-print="'+esc(x.id)+'">Print tags</button><button class="btn red" data-del="'+esc(x.id)+'">Delete</button></div>').join(''):'<div class="empty">No items found. Import Excel or add an item.</div>'}
 function renderCount(){let q=($('countSearch').value||'').toLowerCase(),arr=db.items.filter(x=>!q||[x.name,x.code,x.barcodes.join(' ')].join(' ').toLowerCase().includes(q));$('countList').innerHTML=arr.length?arr.map(x=>'<div class="item"><div class="itemmain"><b>'+esc(x.name)+'</b><small>'+esc(x.code)+' · '+esc(x.purity)+' · Expected '+x.expectedQty+' pcs / '+fmt(x.expectedWeight)+' g</small><br><small>Counted '+x.countedQty+' pcs / '+fmt(x.countedWeight)+' g</small></div><div class="counter"><button data-count="-1" data-id="'+esc(x.id)+'">−</button><b>'+x.countedQty+'</b><button data-count="1" data-id="'+esc(x.id)+'">+</button></div></div>').join(''):'<div class="empty">No stock items.</div>'}
-function rows(){return db.items.map(x=>({Barcode:x.barcodes.join(', '),'Item Code':x.code,'Item Name':x.name,'Category Code':x.categoryCode,Item:x.itemType,Purity:x.purity,'Expected Qty':x.expectedQty,'Counted Qty':x.countedQty,'Qty Difference':x.countedQty-x.expectedQty,'Expected Weight (g)':x.expectedWeight,'Counted Weight (g)':x.countedWeight,'Weight Difference (g)':x.countedWeight-x.expectedWeight,Status:x.countedQty===x.expectedQty&&Math.abs(x.countedWeight-x.expectedWeight)<0.001?'MATCH':x.countedQty<x.expectedQty?'SHORT':'CHECK'}))}
+function rows(){return db.items.map(x=>({Barcode:x.barcodes.join(', '),'Item Code':x.code,'Item Name':x.name,'Category Code':x.categoryCode,Item:x.itemType,Purity:x.purity,'Expected Qty':x.expectedQty,'Counted Qty':x.countedQty,'Qty Difference':x.countedQty-x.expectedQty,'Expected Gross Weight (g)':x.expectedWeight,'Counted Gross Weight (g)':x.countedWeight,'Gross Weight Difference (g)':x.countedWeight-x.expectedWeight,'Stone Weight (g)':x.expectedStoneWeight??'', 'Pure Weight (g)':x.expectedPureWeight??'', 'Making Rate':x.makingRate??'', 'Making Amount':x.makingAmount??'',Article:x.article??'',Line1:x.line1??'',Alias:x.alias??'', 'Purchase Doc No':x.purchaseDoc??'',Status:x.countedQty===x.expectedQty&&Math.abs(x.countedWeight-x.expectedWeight)<0.001?'MATCH':x.countedQty<x.expectedQty?'SHORT':'CHECK'}))}
 function renderReport(){let r=rows();$('reportTable').innerHTML=r.length?'<table><thead><tr>'+Object.keys(r[0]).map(k=>'<th>'+esc(k)+'</th>').join('')+'</tr></thead><tbody>'+r.map(o=>'<tr>'+Object.values(o).map(v=>'<td>'+esc(v)+'</td>').join('')+'</tr>').join('')+'</tbody></table>':'<div class="empty">No data to report.</div>'}
 function render(){renderDash();renderStock();renderCount();renderReport()}
 function go(page){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('hidden',x.id!==page));document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.page===page));if(page==='reports')renderReport()}
@@ -70,6 +77,61 @@ $('manualScan').onclick=()=>{scanCode($('manualBarcode').value);$('manualBarcode
 $('countList').addEventListener('click',e=>{let b=e.target.closest('[data-count]');if(!b)return;let x=db.items.find(z=>z.id===b.dataset.id),delta=Number(b.dataset.count);if(!x)return;if(delta>0&&x.countedQty<x.expectedQty){x.countedQty++;x.countedWeight+=x.expectedWeight/x.expectedQty}else if(delta<0&&x.countedQty>0){x.countedQty--;x.countedWeight=Math.max(0,x.countedWeight-x.expectedWeight/x.expectedQty)}save();render()});
 $('startScan').onclick=async()=>{if(!window.Html5Qrcode){$('scanStatus').textContent='Scanner library unavailable. Connect to internet and reload once.';return}try{$('reader').classList.remove('hidden');scanner=new Html5Qrcode('reader');await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:160}},(code)=>scanCode(code),()=>{});$('scanStatus').textContent='Camera active. Point at one item barcode.'}catch(e){$('scanStatus').textContent='Camera error: '+e+'. Allow camera permission in browser.'}};$('stopScan').onclick=async()=>{try{if(scanner&&scanner.isScanning)await scanner.stop()}catch(e){}scanner=null;$('reader').classList.add('hidden')};
 function norm(s){return String(s??'').toLowerCase().replace(/[ _.-]/g,'')}function get(row,keys){let es=Object.entries(row);for(let k of keys){let f=es.find(([h])=>norm(h).includes(norm(k)));if(f&&f[1]!==''&&f[1]!=null)return f[1]}return ''}
+
+let pendingPdfItems=[];
+function pdfNumber(row,a,b){let t=row.filter(z=>z.x>=a&&z.x<b).map(z=>z.str).join('').replace(/,/g,'').trim();let n=Number(t);return Number.isFinite(n)?n:0}
+function pdfText(row,a,b){return row.filter(z=>z.x>=a&&z.x<b).map(z=>z.str).join('').trim()}
+async function readWinGoldPdf(file){
+ if(!window.pdfjsLib)throw Error('PDF reader library load ആയില്ല. Internet connection പരിശോധിച്ച് page reload ചെയ്യുക.');
+ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+ const task=pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())});
+ const pdf=await task.promise;let activeCategory='',out=[];
+ const typeMap={ANK:'Anklet',BAN:'Bangles',BRA:'Bracelet',CHA:'Chain',EAR:'Earrings',PEN:'Pendant',RIN:'Ring'};
+ for(let pn=1;pn<=pdf.numPages;pn++){
+  const page=await pdf.getPage(pn),content=await page.getTextContent(),items=[];
+  for(const it of content.items){if(!it.str||!it.str.trim())continue;items.push({str:it.str.trim(),x:it.transform[4],y:it.transform[5]})}
+  items.sort((a,b)=>b.y-a.y||a.x-b.x);const lines=[];
+  for(const it of items){let line=lines.findLast?lines.findLast(z=>Math.abs(z.y-it.y)<2.2):null;if(!line){line=lines.find(z=>Math.abs(z.y-it.y)<2.2)}if(line)line.items.push(it);else lines.push({y:it.y,items:[it]})}
+  for(const line of lines){
+   const row=line.items.sort((a,b)=>a.x-b.x),all=row.map(z=>z.str).join(' ');
+   const cm=all.match(/\b(18|21|22)(ANK|BAN|BRA|CHA|EAR|PEN|RIN)\b/);
+   if(cm)activeCategory=cm[1]+cm[2];
+   const serial=pdfText(row,25,65).replace(/,/g,'').trim();
+   const barcode=pdfText(row,65,140).replace(/\s/g,'').match(/BG[A-Z0-9]+/i)?.[0]||'';
+   if(!/^\d+$/.test(serial)||!barcode||!activeCategory)continue;
+   const suffix=activeCategory.slice(2),cat=activeCategory.slice(0,2),gross=pdfNumber(row,135,190),stone=pdfNumber(row,190,240),pure=pdfNumber(row,240,295),rate=pdfNumber(row,295,350),amount=pdfNumber(row,350,385);
+   const article=pdfText(row,385,420),line1=pdfText(row,420,480),alias=pdfText(row,480,570),doc=pdfText(row,570,660);
+   out.push({id:uid(),name:(typeMap[suffix]||suffix)+' '+cat+'K',code:article,categoryCode:cat,itemType:typeMap[suffix]||suffix,purity:cat+'K',expectedQty:1,countedQty:0,expectedWeight:gross,countedWeight:0,expectedStoneWeight:stone,expectedPureWeight:pure,makingRate:rate||'',makingAmount:amount||'',article,line1,alias,purchaseDoc:doc,sourceSerial:serial,sourcePage:pn,pdfCategory:activeCategory,barcodes:[barcode],createdAt:new Date().toISOString()});
+  }
+ }
+ return {items:out,pages:pdf.numPages};
+}
+$('pdfImportFile').onchange=async e=>{
+ const file=e.target.files[0];pendingPdfItems=[];$('importPdfNow').classList.add('hidden');$('pdfPreview').innerHTML='';
+ if(!file)return;
+ try{
+  $('pdfImportStatus').textContent='PDF വായിക്കുന്നു... 53 പേജുകൾക്ക് കുറച്ച് സമയം എടുക്കാം.';
+  const result=await readWinGoldPdf(file);pendingPdfItems=result.items;
+  if(!pendingPdfItems.length)throw Error('Barcode stock rows കണ്ടെത്താനായില്ല.');
+  const seen=new Set(),dupes=[];for(const x of pendingPdfItems){const b=x.barcodes[0];if(seen.has(b))dupes.push(b);seen.add(b)}
+  const gross=pendingPdfItems.reduce((a,x)=>a+x.expectedWeight,0),pure=pendingPdfItems.reduce((a,x)=>a+x.expectedPureWeight,0);
+  const cats={};pendingPdfItems.forEach(x=>cats[x.pdfCategory]=(cats[x.pdfCategory]||0)+1);
+  $('pdfImportStatus').textContent='PDF വായിച്ചു: '+result.pages+' pages · '+pendingPdfItems.length+' barcode items · Gross '+fmt(gross)+' g · Pure '+fmt(pure)+' g · Duplicate barcode: '+dupes.length;
+  $('pdfPreview').innerHTML='<p class="hint"><b>Category preview:</b> '+Object.entries(cats).map(([k,v])=>esc(k)+': '+v).join(' · ')+'</p><div class="tablewrap"><table><thead><tr><th>Barcode</th><th>Category</th><th>Item</th><th>Gross g</th><th>Stone g</th><th>Pure g</th><th>Purchase Doc</th></tr></thead><tbody>'+pendingPdfItems.slice(0,12).map(x=>'<tr><td>'+esc(x.barcodes[0])+'</td><td>'+esc(x.pdfCategory)+'</td><td>'+esc(x.itemType)+'</td><td>'+fmt(x.expectedWeight)+'</td><td>'+fmt(x.expectedStoneWeight)+'</td><td>'+fmt(x.expectedPureWeight)+'</td><td>'+esc(x.purchaseDoc)+'</td></tr>').join('')+'</tbody></table></div><p class="hint">ആദ്യത്തെ 12 items preview ആയി കാണിക്കുന്നു. Import ചെയ്താൽ മുഴുവൻ '+pendingPdfItems.length+' items ചേർക്കും.</p>';
+  if(dupes.length){$('pdfImportStatus').textContent+=' · Duplicate barcodes ഉള്ളതിനാൽ import തടഞ്ഞു: '+dupes.slice(0,5).join(', ');return}
+  $('importPdfNow').classList.remove('hidden');
+ }catch(err){$('pdfImportStatus').textContent='PDF import error: '+err.message}
+};
+$('importPdfNow').onclick=()=>{
+ if(!pendingPdfItems.length)return;
+ const existing=new Set(db.items.flatMap(x=>x.barcodes||[]));
+ const clashes=pendingPdfItems.filter(x=>existing.has(x.barcodes[0]));
+ if($('importMode').value==='append'&&clashes.length){$('pdfImportStatus').textContent='Import നിർത്തി: നിലവിലെ stock-ൽ '+clashes.length+' barcode ഇതിനകം ഉണ്ട്. Replace തിരഞ്ഞെടുക്കുക അല്ലെങ്കിൽ duplicate stock പരിശോധിക്കുക.';return}
+ if(!confirm(pendingPdfItems.length+' PDF stock items import ചെയ്യട്ടേ? Existing count progress will reset for imported items.'))return;
+ if($('importMode').value==='replace')db.items=pendingPdfItems;else db.items.push(...pendingPdfItems);
+ db.extras=[];save();render();$('pdfImportStatus').textContent='വിജയകരമായി import ചെയ്തു: '+pendingPdfItems.length+' items. ആദ്യം Backup എടുക്കുക.';$('importPdfNow').classList.add('hidden');
+};
+
 $('importFile').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{if(!window.XLSX)throw Error('Excel reader not loaded. Open once with internet.');let wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});if(!data.length)throw Error('No rows found.');let list=data.map(r=>{let qty=Math.max(1,Math.floor(Number(get(r,['expectedqty','expected quantity','quantity','qty','stockqty','pieces','pcs']))||1)),weight=Number(get(r,['netweight','net weight','weight','grossweight','gross weight']))||0;let per=$('weightMode').value==='total'?weight/qty:weight;return makeItem({barcode:get(r,['barcode','barcode no','barcode number','ean','upc','tagno','tag number']),code:get(r,['itemcode','item code','stockcode','productcode','code','itemno']),name:get(r,['itemname','item name','productname','description','name','design']),category:get(r,['category','group']),categoryCode:get(r,['categorycode','category code','catcode','cat code']),itemType:get(r,['item type','jewellery type','product type','item']),purity:get(r,['purity','gold type','karat','carat']),qty,perWeight:per})}).filter(x=>x.name||x.code||x.barcodes.length);if(!list.length)throw Error('Could not identify item rows.');if(!confirm('Import '+list.length+' stock lines and '+list.reduce((s,x)=>s+x.expectedQty,0)+' pieces?'))return;if($('importMode').value==='replace')db.items=list;else db.items.push(...list);db.extras=[];save();render();$('importStatus').textContent='Import successful: '+list.length+' stock lines.'}catch(err){$('importStatus').textContent='Import error: '+err.message}};
 $('search').oninput=renderStock;$('filterCat').onchange=renderStock;$('filterType').onchange=renderStock;$('countSearch').oninput=renderCount;
 function download(blob,name){let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500)}
