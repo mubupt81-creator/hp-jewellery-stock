@@ -1,0 +1,10 @@
+{
+  "name": "Hyatt Palace Jewellery Stock Manager",
+  "short_name": "HP Stock",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff9fb",
+  "theme_color": "#742b50",
+  "description": "Offline-ready jewellery stock counting and reconciliation"
+}
